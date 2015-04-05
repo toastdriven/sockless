@@ -26,3 +26,11 @@ Emulates file-like objects.
                 break
 
             print line.strip()
+
+
+TODO
+----
+
+* Tests
+* Docs
+* Python 3 support
