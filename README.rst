@@ -5,7 +5,7 @@ A friendlier interface to `socket`.
 
 Emulates file-like objects.
 
-... code:: python
+.. code:: python
 
     import sockless
 

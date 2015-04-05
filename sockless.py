@@ -29,7 +29,6 @@ Usage::
 
             print line.strip()
 
-
 """
 import contextlib
 
