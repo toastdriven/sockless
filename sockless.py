@@ -37,7 +37,7 @@ import socket
 
 __author__ = 'Daniel Lindsley'
 __license__ = 'BSD'
-__version__ = (0, 9, 0)
+__version__ = (0, 9, 1)
 
 
 DEFAULT_TIMEOUT = 60
