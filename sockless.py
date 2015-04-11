@@ -325,8 +325,17 @@ class NonBlockingSocket(object):
             return []
 
         if limit >= 0:
-            line, self._buffer = self._buffer.split('\n', 1)
-            return [line]
+            if not '\n' in self._buffer:
+                return None
+
+            bits = self._buffer.split('\n', 1)
+
+            if len(bits) < 2:
+                self._buffer = ''
+            else:
+                self._buffer = bits[1]
+
+            return [bits[0]]
 
         lines = self._buffer.split('\n')
 
