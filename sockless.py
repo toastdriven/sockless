@@ -31,11 +31,8 @@ Usage::
 
 """
 import contextlib
-
-try:
-    from gevent import socket
-except ImportError:
-    import socket
+import select
+import socket
 
 
 __author__ = 'Daniel Lindsley'
@@ -52,6 +49,11 @@ class TimedOut(SocklessException): pass
 class AddressNotFound(SocklessException): pass
 class BrokenConnection(SocklessException): pass
 class NotConnected(SocklessException): pass
+
+
+def split_address(address):
+    host, port = address.split(':')
+    return host, int(port)
 
 
 class Socket(object):
@@ -71,8 +73,7 @@ class Socket(object):
         self._writable = False
 
     def split_address(self, address):
-        host, port = address.split(':')
-        return host, int(port)
+        return split_address(address)
 
     def open(self, mode='rw'):
         host, port = self.split_address(self.address)
@@ -208,6 +209,145 @@ class Socket(object):
         host, port = self.split_address(address)
         bits = socket.getaddrinfo(host, port)
         return [bit[4] for bit in bits]
+
+
+class NonBlockingSocket(object):
+    def __init__(self, address):
+        self.address = address
+        self._conn = None
+        self._buffer = ''
+        self._readable = False
+        self._writable = False
+
+    def split_address(self, address):
+        return split_address(address)
+
+    def _check_conn(self):
+        if not self._conn:
+            raise NotConnected("Not connected to {}".format(
+                self.address
+            ))
+
+    def open(self, mode='rw'):
+        host, port = self.split_address(self.address)
+
+        if mode == 'rw':
+            self._readable = True
+            self._writable = True
+        elif mode == 'r':
+            self._readable = True
+        elif mode == 'w':
+            self._writable = True
+
+        try:
+            self._conn = socket.create_connection((host, port))
+            self._conn.setblocking(0)
+        except socket.gaierror:
+            raise AddressNotFound("Could connect to {}:{}".format(
+                host,
+                port
+            ))
+        except socket.timeout:
+            raise TimedOut("Connection to {}:{} timed out".format(
+                host,
+                port
+            ))
+
+    def close(self):
+        self._check_conn()
+        self._conn.close()
+
+    def select(self):
+        self._check_conn()
+        rlist = []
+        wlist = []
+
+        if self._readable:
+            rlist.append(self._conn)
+
+        if self._writable:
+            wlist.append(self._conn)
+
+        return select.select(rlist, wlist, [])
+
+    def readable(self):
+        rlist, wlist, xlist = self.select()
+        return len(rlist) > 0
+
+    def writable(self):
+        rlist, wlist, xlist = self.select()
+        return len(wlist) > 0
+
+    def read(self, size=4096):
+        rlist, wlist, xlist = self.select()
+        amount_read = 0
+
+        if not rlist:
+            return amount_read
+
+        rsock = rlist[0]
+
+        while rsock:
+            received = rsock.recv(size)
+            # Unfortunately, we can't detect broken connections here, since
+            # this method doesn't block until the send *actually* happens.
+            # Lots of false positivites trying to detect zero conditions.
+            amount_read += len(received)
+            self._buffer += received
+            rlist, wlist, xlist = self.select()
+
+            if rlist:
+                rsock = rlist[0]
+            else:
+                rsock = None
+
+        return amount_read
+
+    def readline(self):
+        return self.readlines(limit=1)
+
+    def readlines(self, limit=-1):
+        if limit == 0:
+            return []
+
+        while True:
+            rsize = self.read()
+
+            if not rsize:
+                break
+
+        if not self._buffer:
+            return []
+
+        if limit >= 0:
+            line, self._buffer = self._buffer.split('\n', 1)
+            return [line]
+
+        lines = self._buffer.split('\n')
+
+        if not self._buffer.endswith('\n'):
+            self._buffer = lines.pop()
+        else:
+            self._buffer = ''
+
+        return lines
+
+    def write(self, data):
+        rlist, wlist, xlist = self.select()
+
+        if not wlist:
+            # FIXME: Not sure this should just fail. Should I buffer instead?
+            return False
+
+        wsock = wlist[0]
+        amount_sent = wsock.sendall(data)
+        return amount_sent
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.readline()
 
 
 @contextlib.contextmanager
