@@ -161,12 +161,13 @@ class Socket(object):
         return self._send(data)
 
     def __iter__(self):
-        # FIXME: Check yo'self.
         return self
 
-    def next(self):
-        # FIXME: Check yo'self.
+    def __next__(self):
         return self.readline()
+
+    def next(self):
+        return self.__next__()
 
     # Socket-specific methods
 
