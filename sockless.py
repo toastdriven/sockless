@@ -304,7 +304,12 @@ class NonBlockingSocket(object):
         return amount_read
 
     def readline(self):
-        return self.readlines(limit=1)
+        lines = self.readlines(limit=1)
+
+        if not lines:
+            return None
+
+        return lines[0]
 
     def readlines(self, limit=-1):
         if limit == 0:
